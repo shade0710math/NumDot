@@ -1,0 +1,106 @@
+/**
+ * 文書全体のスタイル
+ */
+body {
+    margin-left: 0em;
+    margin-right: 0em;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+}
+
+/**
+ * 見出しのスタイル
+ */
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Times New Roman", "ＭＳ ゴシック";
+}
+
+/**
+ * 本文のスタイル
+ */
+/* 段落 */
+p {
+    text-indent: 1em;
+    font-family: "Times New Roman", "ＭＳ ゴシック";
+    font-size: medium;
+}
+/* 強調 */
+em {
+    font-style: normal;
+    font-weight: bold;
+}
+
+/**
+ * リンクのスタイル
+ */
+a {
+    color: inherit;
+    background-color: inherit;
+    text-decoration: none;
+}
+a:link {
+    color: #0000ff;
+    background-color: inherit;
+    text-decoration: underline;
+}
+a:visited {
+    color: #0000ff;
+    background-color: inherit;
+    text-decoration: underline;
+}
+a:hover {
+    color: #ff0000;
+    background-color: inherit;
+    text-decoration: underline;
+}
+a:active {
+    color: #ff0000;
+    background-color: inherit;
+    text-decoration: underline;
+}
+
+/**
+ * 箇条書きのスタイル
+ */
+li {
+    font-family: "Times New Roman", "ＭＳ ゴシック";
+}
+
+/**
+ * コードのスタイル
+ */
+div.source {
+    border: solid 1px blue;
+    background-color: inherit;
+    width: 99%;
+    margin: auto;
+}
+div.source pre {
+    margin: 1em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+}
+code {
+    font-size: inherit;
+}
+
+/**
+ * メタデータのスタイル
+ */
+/* 最終更新日 */
+div.lastModified {
+    font-family: "Times New Roman", "ＭＳ ゴシック";
+    text-align: right;
+}
+div.copyright {
+    text-align: center;
+}
+
+/**
+ * 数式のスタイル
+ */
+div.math {
+    margin: auto;
+    text-align: center;
+}
