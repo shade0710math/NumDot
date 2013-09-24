@@ -1,0 +1,640 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ナムドット問題 - 夏色日傘のCodeIQ解答</title>
+    <link rel="stylesheet" href="index.css"/>
+  </head>
+  <body>
+    <h1>古代文献を復元しよう！ -ナムドット問題-</h1>
+    <div class="lastModified">作成：2013-09-25 夏色日傘（<a href="https://twitter.com/shade0710math">@shade0710math</a>）</div>
+    <h2>はじめに</h2>
+    <p>このたび、9 月 25 日午前10時まで <a href="https://codeiq.jp/">CodeIQ</a> にて出題されていた、<a href="https://codeiq.jp/ace/yuki_hiroshi/q468">結城浩先生のナムドット問題</a>を解いてみました。一部が欠損してしまった古代文献を、欠損していない部分からルールを推定して復元するという問題でした。しかし、私はそのルールを推定することができず、正解に辿り着くことができませんでした。</p>
+    <p>古代文献の規則性を見つけられなかったため、とりあえず<a href="http://ja.wikipedia.org/wiki/%E3%83%90%E3%83%83%E3%82%AF%E3%83%97%E3%83%AD%E3%83%91%E3%82%B2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3">バックプロパゲーション</a>を用いた機械学習によって解くことにしました。長い時間をかけて学習させた割には納得のいく解が得られなかったのですが……。</p>
+    <h2>ナムドット問題とは</h2>
+    <p>ナムドット問題とは、1 から 5 までの整数（Num）と . （Dot）からなる文字列（以下、ナムドット文字列） 52 行からなる古代文献のうち欠損した 20 行を、未欠損部分をヒントに埋める問題です。その古代文献は暦を表しているとのことですが……。</p>
+    <p>52 行のナムドット文字列（欠損部分は「?」で表されている）がファイル numdot.txt に記載されていました（現在は公開終了となっています）。この numdot.txt をもとに古代文献を復元するのが、今回解いたナムドット問題なのです。</p>
+    <h2>実装したプログラム</h2>
+    <p>詳しい解説は「<a href="#description">解説</a>」の項を参照願います（といっても、今回はあまり詳しくない気がしますが）。</p>
+    <h3>MachineLearningUtil.java</h3>
+    <p>機械学習のユーティリティクラスです。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+/**
+ * &lt;p&gt;機械学習のユーティリティクラスです。&lt;/p&gt;
+ * 
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public class MachineLearningUtil
+{
+    /**
+     * &lt;p&gt;インスタンス化禁止。&lt;/p&gt;
+     */
+    private MachineLearningUtil()
+    {
+    }
+    
+    /**
+     * &lt;p&gt;シグモイド関数です。&lt;/p&gt;
+     * @param d シグモイド関数の引数
+     * @return シグモイド関数の出力
+     */
+    public static final double sigmoid( double d )
+    {
+        return ( 1 / ( 1 + Math.exp( -d ) ) );
+    }
+    
+    /**
+     * &lt;p&gt;入力データの個数と出力先の個数を指定することで結合重みの配列を作成します。各重みは
+     * -1 以上 1 未満として初期化されます。&lt;/p&gt;
+     * @param inputDim
+     * @param outputDim
+     * @return
+     */
+    public static final double[][] createLayerArray( int inputDim, int outputDim )
+    {
+        double[][] result = new double[ inputDim ][ outputDim ];
+        for( int i = 0; i &lt; result.length; i++ ) {
+            for( int j = 0; j &lt; result[ i ].length; j++ ) {
+                result[ i ][ j ] = Math.random() * 2 - 1;
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * &lt;p&gt;パーセプトロンの入力ベクトルから出力ベクトルを得ます。&lt;/p&gt;
+     * @param input パーセプトロンの入力ベクトル
+     * @param weight 結合重み
+     * @return 出力ベクトル
+     */
+    public static final double[] junction( double[] input, double[][] weight )
+    {
+        double[] output = new double[ weight[ 0 ].length ];
+        
+        for( int j = 0; j &lt; output.length; j++ ) {
+            double value = 0d;
+            for( int i = 0; i &lt; input.length; i++ ) {
+                value += input[ i ] * weight[ i ][ j ];
+            }
+            output[ j ] = sigmoid( value );
+        }
+        
+        return output;
+    }
+    
+    /**
+     * &lt;p&gt;指定された整数を指定されたサイズの実数配列に変換します。配列には、指定された整数の
+     * 2 進数表現がセットされます。&lt;/p&gt;
+     * @param number
+     * @param size
+     * @return
+     */
+    public static final double[] toArray( int number, int size )
+    {
+        double[] result = new double[ size ];
+        for( int i = size - 1; i &gt;= 0; i-- ) {
+            result[ i ] = ( number &amp; 1 );
+            number &gt;&gt;&gt;= 1;
+        }
+        
+        return result;
+    }
+    
+    /**
+     * &lt;p&gt;指定された整数を実数配列に変換します。配列には、指定された整数の
+     * 2 進数表現がセットされます。&lt;/p&gt;
+     * @param number
+     * @return
+     */
+    public static final double[] toArray( int number )
+    {
+        return toArray( number, (int)( Math.log1p( number &amp; Integer.MAX_VALUE ) / Math.log( 2 ) ) );
+    }
+    
+    /**
+     * &lt;p&gt;指定された実数配列を整数に変換します。配列の各桁は 0.5 以上であれば
+     * 1、0.5 未満であれば 0 とみなし、連結して 2 進数にしたのち 10 進数として返します。&lt;/p&gt;
+     * @param array
+     * @return
+     * @throws NullPointerException 引数が null である場合
+     */
+    public static final int toNumber( double[] array )
+    {
+        int result = 0;
+        for( int i = 0; i &lt; array.length; i++ ) {
+            result = ( ( result &lt;&lt; 1 ) | ( array[ i ] &lt; 0.5 ? 0 : 1 ) );
+        }
+        return result;
+    }
+    
+    /**
+     * &lt;p&gt;2 つの配列の最小二乗誤差を計算します。&lt;/p&gt;
+     * @param x 最小二乗誤差を求める配列
+     * @param y 最小二乗誤差を求める配列
+     * @return x と y の最小二乗誤差
+     */
+    public static double leastMeanSquareError( double[] x, double[] y )
+    {
+        double e = 0.0d;
+        for( int i = 0; i &lt; x.length; i++ ) {
+            e += ( x[ i ] - y[ i ] ) * ( x[ i ] - y[ i ] );
+        }
+        return ( e * 0.5d );
+    }
+}</code></pre>
+    </div>
+    <h3>LearningMachine.java</h3>
+    <p>学習機械のインタフェースです。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+/**
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public interface LearningMachine
+{
+    /**
+     * &lt;p&gt;機械学習の状況（パラメータやトレーニングデータなど）を初期化します。&lt;/p&gt;
+     */
+    public void initialize();
+    
+    /**
+     * &lt;p&gt;学習用データを与えます。&lt;/p&gt;
+     * @param week
+     * @param numDot
+     */
+    public void addLearningData( byte week, int numDot );
+    
+    /**
+     * addLearningData によって与えられたデータを基に、ナムドット問題を解くための学習を実行します。
+     */
+    public void learn();
+    
+    /**
+     * &lt;p&gt;指定されたデータからナムドット問題における欠損箇所を特定します。&lt;/p&gt;
+     * @param week
+     * @return
+     */
+    public int test( byte week );
+}</code></pre>
+    </div>
+    <h3>BackPropergation.java</h3>
+    <p>バックプロパゲーションを用いる学習機械です。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+/**
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public class BackPropergation implements LearningMachine
+{
+    //入力層の要素数（6 ビットで表現される整数を要素数 6 の配列に変換する）
+    private static final int INPUT_SIZE = 6;
+    
+    //出力層の要素数（19 ビットで表現される整数を要素数 19 の配列から変換する）
+    private static final int OUTPUT_SIZE = 19;
+    
+    //学習の反復回数
+    private static final double LEARNING_THRESHOLD = 0.00006103515625d;  // 1/16384
+    
+    //トレーニングデータとして与える週の番号（1 以上 52 以下）
+    private byte[] week = new byte[ 52 ];
+    
+    //トレーニングデータとして与えるナムドットの19桁ビット列表現（最大 52 種類）
+    private int[] numDot = new int[ 52 ];
+    
+    //トレーニングデータの個数
+    private byte learningDataNum = 0;
+    
+    //入力層（input layer）→中間層（hidden layer）の係数
+    private double[][] w;
+    
+    //中間層（hidden layer）→出力層（output layer）の係数
+    private double[][] h;
+    
+    //中間層の要素数
+    private int hiddenDim;
+    
+    /**
+     * &lt;p&gt;中間層の要素数 5 の 3 層ニューラルネットワークのコンストラクタです。&lt;/p&gt;
+     */
+    public BackPropergation()
+    {
+        this( 5 );
+    }
+    
+    /**
+     * &lt;p&gt;指定された要素数の中間層を持つ 3 層ニューラルネットワークのコンストラクタです。&lt;/p&gt;
+     * 
+     * @param hiddenDim 中間層の要素数
+     */
+    public BackPropergation( int hiddenDim )
+    {
+        setHiddenDim( hiddenDim );
+    }
+    
+    /**
+     * &lt;p&gt;中間層の要素数を変更します。&lt;/p&gt;
+     * 
+     * @param hiddenDim 中間層の要素数
+     * @throws IllegalArgumentException 引数が 0 以下の場合
+     */
+    public void setHiddenDim( int hiddenDim )
+    {
+        if( hiddenDim &lt; 1 ) {
+            throw new IllegalArgumentException( "中間層の個数は 1 個以上としなければなりません。" );
+        }
+        this.hiddenDim = hiddenDim;
+    }
+    
+    /* (非 Javadoc)
+     * @see codeiq.hyuki.numdot.Identifier#addLearningData(byte, short)
+     */
+    @Override
+    public void addLearningData( byte week, int numDot )
+    {
+        this.week[ learningDataNum ] = week;
+        this.numDot[ learningDataNum ] = numDot;
+        learningDataNum++;
+    }
+    
+    /* (非 Javadoc)
+     * @see codeiq.hyuki.numdot.LearningMachine#learn()
+     */
+    @Override
+    public void learn()
+    {
+        //学習係数
+        double alpha = 0.125d;
+        
+        //入力層→中間層の結合重みを設定（-1 以上 1 未満とする）
+        w = MachineLearningUtil.createLayerArray( INPUT_SIZE, hiddenDim );
+        
+        //中間層→出力層の結合重みを設定（-1 以上 1 未満とする）
+        h = MachineLearningUtil.createLayerArray( hiddenDim, OUTPUT_SIZE );
+        
+        //繰り返し学習する
+        boolean learning = true;
+        while( learning ) {
+            //学習データからランダムにデータを選定する（週とそれに対応するナムドット）
+            int exampleIndex = (int)( Math.random() * learningDataNum );
+            double[] input = MachineLearningUtil.toArray( week[ exampleIndex ], INPUT_SIZE );
+            double[] correct = MachineLearningUtil.toArray( numDot[ exampleIndex ], OUTPUT_SIZE );
+            
+            //入力層のデータと重みから中間層のデータを求める
+            double[] hidden = MachineLearningUtil.junction( input, w );
+            
+            //中間層のデータと重みから出力層のデータを求める
+            double[] output = MachineLearningUtil.junction( hidden, h );
+            
+            //出力層→中間層のフィードバック
+            for( int k = 0; k &lt; output.length; k++ ) {
+                double diff = correct[ k ] - output[ k ];          //出力の誤差
+                double ds = output[ k ] * ( 1.0d - output[ k ] );  //シグモイド関数の微分
+                double a = alpha * diff * ds;                      //修正量算出の係数
+                for( int j = 0; j &lt; hidden.length; j++ ) {
+                    h[ j ][ k ] += a * hidden[ j ];                //重みを修正
+                }
+            }
+            
+            //中間層→入力層のフィードバック
+            for( int j = 0; j &lt; hidden.length; j++ ) {
+                double sum = 0.0d;
+                for( int k = 0; k &lt; output.length; k++ ) {
+                    double diff = correct[ k ] - output[ k ];          //出力の誤差
+                    double ds = output[ k ] * ( 1.0d - output[ k ] );  //シグモイド関数の微分
+                    sum += h[ j ][ k ] * diff * ds;
+                }
+                
+                double ds = hidden[ j ] * ( 1.0d - hidden[ j ] );      //シグモイド関数の微分
+                double a = alpha * sum * ds;                           //修正量算出の係数
+                for( int i = 0; i &lt; input.length; i++ ) {
+                    w[ i ][ j ] += a * input[ i ]; 
+                }
+            }
+            
+            //全入力データに対する最小二乗誤差の総和を算出
+            double e = 0.0d;
+            for( int wi = 0; wi &lt; learningDataNum; wi++ ) {
+                double[] weekVector = MachineLearningUtil.toArray( week[ wi ], INPUT_SIZE );
+                double[] correctVector = MachineLearningUtil.toArray( numDot[ wi ], OUTPUT_SIZE );
+                
+                double[] outputVector = MachineLearningUtil.junction(
+                        MachineLearningUtil.junction( weekVector, w ), h );
+                
+                e += MachineLearningUtil.leastMeanSquareError( correctVector, outputVector );
+            }
+            
+            learning = ( e &gt; LEARNING_THRESHOLD );
+        }
+    }
+
+    /* (非 Javadoc)
+     * @see codeiq.hyuki.numdot.LearningMachine#test(byte)
+     */
+    @Override
+    public int test( byte week )
+    {
+        //週の値をビットベクトルに変換
+        double[] input = MachineLearningUtil.toArray( week, INPUT_SIZE );
+        
+        //入力層のデータと重みから中間層のデータを求める
+        double[] hidden = MachineLearningUtil.junction( input, w );
+        
+        //中間層のデータと重みから出力層のデータを求める
+        double[] output = MachineLearningUtil.junction( hidden, h );
+        
+        //出力層のデータ（ビットベクトル）を整数に変換
+        return MachineLearningUtil.toNumber( output );
+    }
+    
+    /* (非 Javadoc)
+     * @see codeiq.hyuki.numdot.LearningMachine#initialize()
+     */
+    @Override
+    public void initialize()
+    {
+        //未実装。
+        throw new UnsupportedOperationException();
+    }
+}</code></pre>
+    </div>
+    <h3>NumDotUtil.java</h3>
+    <p>ナムドット問題のユーティリティクラスです。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+/**
+ * &lt;p&gt;ナムドット問題のユーティリティクラスです。&lt;/p&gt;
+ * 
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public class NumDotUtil
+{
+    /**
+     * &lt;p&gt;インスタンス化禁止。&lt;/p&gt;
+     */
+    private NumDotUtil()
+    {
+    }
+    
+    /**
+     * &lt;p&gt;与えられたナムドット文字列を19桁のビット列に変換し、符号付き整数値として返します。&lt;/p&gt;
+     * &lt;p&gt;以下のルールで変換します。&lt;/p&gt;
+     * &lt;ul&gt;
+     *   &lt;li&gt;0 以上 5 以下の数字 → その数字の三桁二進表現&lt;/li&gt;
+     *   &lt;li&gt;数字と数字の間 → "." があれば 1、なければ 0&lt;/li&gt;
+     * &lt;/ul&gt;
+     * 
+     * @param numDotString 変換対象のナムドット文字列
+     * @return ナムドット文字列のビット表現
+     * @see #decode(int)
+     */
+    public static final int encode( String numDotString )
+    {
+        //最初の文字は必ず数字（1 で固定？）だと思われるので、
+        //最初の文字だけはそのまま三桁の二進表現に変換する。
+        int result = Character.digit( numDotString.charAt( 0 ), 10 );
+        
+        for( int i = 1; i &lt; numDotString.length(); i++ ) {
+            if( numDotString.charAt( i ) == '.' ) {
+                result = ( result &lt;&lt; 1 ) | 1;
+            }
+            else if( numDotString.charAt( i - 1 ) != '.' ) {
+                result = ( result &lt;&lt; 4 ) | Character.digit( numDotString.charAt( i ), 10 );
+            }
+            else {
+                result = ( result &lt;&lt; 3 ) | Character.digit( numDotString.charAt( i ), 10 );
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * &lt;p&gt;与えられた符号付き 32 ビット整数の下位 19 ビットを、ナムドット文字列にデコードします。&lt;/p&gt;
+     * @param numDotInteger ナムドット文字列のビット表現
+     * @return ナムドット文字列
+     * @see #encode(String)
+     */
+    public static final String decode( int numDotInteger )
+    {
+        final int NUM_MASK = 7;
+        final int DOT_MASK = 1;
+        
+        StringBuffer buffer = new StringBuffer();
+        
+        //左から 5 番目の数を文字列の最も右側に設定
+        buffer.insert( 0, numDotInteger &amp; NUM_MASK );
+        numDotInteger &gt;&gt;&gt;= 3;
+        
+        //左から 4, 3, 2, 1 番目の数については、直後の文字がドットである可能性があるため、
+        //5 番目の数とは扱いを変えてループで処理する。
+        for( int i = 4; i &gt; 0; i-- ) {
+            //左から i 番目の数直後のフラグが立っていれば文字列の左側にドットを追加
+            if( ( numDotInteger &amp; DOT_MASK ) == 1 ) {
+                buffer.insert( 0, "." );
+            }
+            numDotInteger &gt;&gt;&gt;= 1;
+
+            //左から i 番目の数を文字列の左側に追加
+            buffer.insert( 0, numDotInteger &amp; NUM_MASK );
+            numDotInteger &gt;&gt;&gt;= 3;
+        }
+        
+        return buffer.toString();
+    }
+}</code></pre>
+    </div>
+    <h3>NumDotSolver.java</h3>
+    <p>ナムドット問題のソルバークラスです。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.Scanner;
+
+/**
+ * &lt;p&gt;ナムドット問題のソルバークラスです。&lt;/p&gt;
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public class NumDotSolver
+{
+    //学習機械
+    private LearningMachine learner = new BackPropergation( 13 );
+    
+    private static final NumDotSolver instance = new NumDotSolver();
+    private NumDotSolver(){}
+    
+    /**
+     * &lt;p&gt;このクラスの唯一（シングルトン）のインスタンスを返します。&lt;/p&gt;
+     * 
+     * @return このクラスの唯一のインスタンス
+     */
+    public static NumDotSolver getInstance()
+    {
+        return instance;
+    }
+    
+    /**
+     * &lt;p&gt;学習用の機械をセットします。&lt;/p&gt;
+     * @param learner 学習機械
+     */
+    public void setLearner( LearningMachine learner )
+    {
+        this.learner = learner;
+    }
+    
+    /**
+     * &lt;p&gt;機械学習によってナムドット問題を解きます。&lt;/p&gt;
+     */
+    public void solve()
+    {
+        //ファイル numdot.txt を読み込む
+        read( "numdot.txt" );
+        
+        //学習
+        learner.learn();
+        
+        //推論の出力
+        for( byte week = 1; week &lt; 53; week++ ) {
+            System.out.println( NumDotUtil.decode( learner.test( week ) ) );
+        }
+        System.out.println( "ENV: Java 7" );
+        System.out.println( "POINT: どのようなルールで並んでいるかを見抜くことだと思われます。" );
+        System.out.println();
+        System.out.println( "■解法" );  //出力結果を手動で answer.txt にコピーして、この後の行を手入力する。
+    }
+    
+    /**
+     * &lt;p&gt;与えられた名前のファイルを読み込んで、学習機械に与えます。&lt;/p&gt;
+     * @param fileName ファイル名
+     */
+    private void read( String fileName )
+    {
+        try( Scanner scanner = new Scanner( new File( "files", fileName ) ) ) {
+            for( byte week = 1; scanner.hasNextLine(); week++ ) {
+                String line = scanner.nextLine();
+                
+                //読み込んだ行が "?" ならば欠損データなので、読み飛ばす。
+                if( !"?".equals( line ) ) {
+                    //最初の文字は必ず数字（1 で固定？）だと思われるので、
+                    //最初の文字だけはそのまま三桁の二進表現に変換する。
+                    int data = NumDotUtil.encode( line );
+                    
+                    learner.addLearningData( week, data );
+                }
+            }
+        }
+        catch( FileNotFoundException e ) {
+            throw new RuntimeException( e );
+        }
+    }
+}</code></pre>
+    </div>
+    <h3>NumDotMain.java</h3>
+    <p>ナムドット問題を実行するクラスです。</p>
+    <div class="source">
+      <pre><code>package codeiq.hyuki.numdot;
+
+/**
+ * @author Natsuiro Higasa (shade0710math)
+ */
+public class NumDotMain
+{
+    public static void main( String... args )
+    {
+        // ナムドット問題ソルバーの作成
+        NumDotSolver solver = NumDotSolver.getInstance();
+        
+        // ナムドット問題を解く
+        solver.solve();
+    }
+}</code></pre>
+    </div>
+
+    <h3>実行結果</h3>
+    <p>実行結果は以下の通りです（「Env:」以下は省略）。</p>
+    <div class="source">
+      <pre><code>12345
+1234.5
+1235.4
+123.45
+123.4.5
+1245.3
+124.35
+124.3.5
+125.34
+12.345
+12.34.5
+125.3.4
+12.35.4
+12.3.45
+12.3.4.5
+1345.2
+134.25
+134.2.5
+135.24
+13.245
+13.24.5
+135.2.4
+13.25.4
+13.2.45
+13.2.4.5
+145.23
+123.25
+<em>13.24.5
+13.24.5
+13.3.45
+13.34.5
+1.2.3.5.4
+1.2.35.5
+1.2.34.4
+1.2.34.5
+123.5.5
+1.2.34.5
+123.45
+12.34.5
+1.2.2.5.4
+123.3.5
+1.2.34.5
+1.2.34.5
+12.35.4
+1.2.35.4
+12.34.5
+1.2.34.5</em>
+15.2.3.4
+1.25.3.4
+1.2.35.4
+1.2.3.45
+1.2.3.4.5</code></pre>
+    </div>
+    
+    <h2 id="description">解説</h2>
+    <h3>入力層と出力層について</h3>
+    <p>バックプロパゲーション、あるいはニューラルネットワークについての詳細についてはインターネットで検索していただくとして、ここでは入力層と出力層の形式化について説明します。</p>
+    <p>入力層は行数を、出力層はナムドット文字列を、各々ビット列で表すことにします。このとき、欠損していない部分のナムドット文字列を教師信号とします。</p>
+    <p>まず、入力層についてです。行数は 52 と定められているため、高々 6 ビットで表すことができます。よって、入力層はサイズ 6 の配列とし、各要素は行数の 6 ビット二進表現の各桁を表すものとします。</p>
+    <p>次に、出力層についてです。欠損していない箇所を見ると、ナムドット文字列は先頭と末尾が数字（もちろん 1, 2, 3, 4, 5 のいずれか。すべて高々 3 ビットで表現可能）で、ドットは数字と数字の間に高々 1 個しか入らない、という決まりがあると推定できます（<a href="#note01">注1</a>）。各数字の間にドットが入るかどうかを 1 ビットのフラグで表すものとすると、ナムドット文字列は 3 + 1 + 3 + 1 + 3 + 1 + 3 + 1 + 3 = 19 ビットのビット列で表すことができます。よって、出力層はサイズ 19 の配列とし、各要素はナムドット文字列の 19 ビット二進表現の各桁を表すものとします。</p>
+    
+    <h2>終わりに</h2>
+    <p>なるべく時間をかけてゆっくりと学習させることで精度が上がると考えられますが、時間をかけた割には（<a href="#note02">注2</a>）納得のいく解が得られなかったという印象です。重複する行や重複する数字があるなど、未欠損部分にはない特徴が出てきてしまったので。</p>
+    <p>もっと時間をかけて学習すべきかとも思いますが、機械学習による「推論」よりも、ルールを推定してナムドット文字列を「生成」するほうが適切なアプローチのような気がしています。このあたり、<a href="https://codeiq.jp/ace/yuki_hiroshi/q312">トグル問題</a>と同じものを感じますね。</p>
+    <p>今回の問題は難しく（<a href="#note03">注3</a>）、提出はできたもののバッジはいただけないかと思います。次回はいただきたいものです。</p>
+    
+    <hr class="separator" />
+    <ul class="note">
+      <li id="note01">注1. ついでにいうと、先頭は 1 で固定であると考えられます。</li>
+      <li id="note02">注2. 9 時間くらいかかった気がします。</li>
+      <li id="note03">注3. 難易度は「☆」なのですが……。</li>
+    </ul>
+    
+    <hr class="separator" />
+    <div class="copyright">&#169;Higasa Natsuiro(shade0710/shade0710math) 2013 All rights reserved.</div>
+  </body>
+</html>
